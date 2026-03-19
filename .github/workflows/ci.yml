@@ -1,0 +1,46 @@
+
+name: CI
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ feature/** ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      RAILS_ENV: test
+      REDIS_URL: redis://localhost:6379/1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libvips42 || true
+      - name: Bundle install
+        run: bundle install --jobs 3 --retry 3
+      - name: Prepare DB
+        run: |
+          bin/rails db:prepare
+      - name: RuboCop
+        run: |
+          if [ -f .rubocop.yml ]; then bundle exec rubocop; else echo "No RuboCop config"; fi
+      - name: Run RSpec (with coverage)
+        run: |
+          bundle exec rspec --format documentation
+      - name: Run Cucumber (if present)
+        run: |
+          if [ -d features ]; then bundle exec cucumber; else echo "No features/"; fi
