@@ -73,7 +73,11 @@
         <td><%= number_to_currency(item.price) %></td>
         <td><%= h(item.category.to_s.empty? ? '-' : item.category) %></td>
         <td><%= item.available ? 'Yes' : 'No' %></td>
-        <td><a href="/items/<%= item.id %>">View</a></td>
+        <td>
+          <a href="/items/<%= item.id %>">View</a>
+          |
+          <a href="/items/<%= item.id %>">Start Bidding</a>
+        </td>
       </tr>
     <% end %>
   </tbody>
