@@ -1,0 +1,22 @@
+<h1>Items List</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @items.each do |item| %>
+      <tr>
+        <td><%= item.id %></td>
+        <td><%= item.name %></td>
+        <td><%= item.description %></td>
+        <td><%= number_to_currency(item.price) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
