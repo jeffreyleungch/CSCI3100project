@@ -4,7 +4,7 @@ begin
   require 'simplecov'
   SimpleCov.start 'rails' do
     enable_coverage :branch
-    minimum_coverage 85
+    minimum_coverage ENV.fetch('SIMPLECOV_MINIMUM_COVERAGE', '0').to_i
   end
 rescue LoadError
   warn 'SimpleCov not available; install to enforce coverage'

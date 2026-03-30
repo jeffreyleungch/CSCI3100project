@@ -1,0 +1,282 @@
+<style>
+  :root {
+    --bg: #f6f1e8;
+    --panel: #fffdfa;
+    --ink: #1b1b1a;
+    --muted: #5f5a52;
+    --line: #d8cfc2;
+    --brand: #9a3412;
+    --brand-soft: #f5d9cb;
+    --ok: #166534;
+    --ok-soft: #dcfce7;
+    --warn: #9f1239;
+    --warn-soft: #ffe4e6;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 10% 0%, #fce7f3 0%, transparent 42%),
+      radial-gradient(circle at 100% 100%, #ffedd5 0%, transparent 40%),
+      var(--bg);
+  }
+
+  .auction-page {
+    max-width: 980px;
+    margin: 2.5rem auto;
+    padding: 0 1rem;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(45, 35, 20, 0.08);
+    padding: 1.2rem;
+  }
+
+  .hero {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    background: linear-gradient(120deg, #fff7ed 0%, #fff1f2 100%);
+  }
+
+  .hero h1 {
+    margin: 0;
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    letter-spacing: 0.02em;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.7rem;
+  }
+
+  .meta-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.7rem;
+    background: #fff;
+  }
+
+  .meta-card p {
+    margin: 0.15rem 0;
+  }
+
+  .label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .value {
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+
+  .description {
+    margin: 0;
+    color: #2f2b27;
+    line-height: 1.6;
+  }
+
+  .notice,
+  .error-box {
+    border-radius: 10px;
+    padding: 0.75rem 0.95rem;
+    margin-bottom: 1rem;
+    border: 1px solid;
+  }
+
+  .notice {
+    color: var(--ok);
+    background: var(--ok-soft);
+    border-color: #86efac;
+  }
+
+  .error-box {
+    color: var(--warn);
+    background: var(--warn-soft);
+    border-color: #fda4af;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .card-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.1rem;
+  }
+
+  .bid-form {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .bid-form label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+
+  .bid-form input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.62rem 0.7rem;
+    font-size: 0.96rem;
+    background: #fff;
+  }
+
+  .bid-form button {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    background: var(--brand);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .bid-form button:hover {
+    filter: brightness(1.07);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.7rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.94rem;
+  }
+
+  thead th {
+    background: var(--brand-soft);
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-top: 1rem;
+    color: var(--brand);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  @media (min-width: 860px) {
+    .grid {
+      grid-template-columns: 340px 1fr;
+      align-items: start;
+    }
+  }
+</style>
+
+<main class="auction-page">
+  <% if params['notice'] && !params['notice'].empty? %>
+    <p class="notice"><%= h(params['notice']) %></p>
+  <% end %>
+
+  <% if @bid_errors && !@bid_errors.empty? %>
+    <div class="error-box">
+      <p><strong>Could not place bid:</strong></p>
+      <ul>
+        <% @bid_errors.each do |message| %>
+          <li><%= h(message) %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <section class="panel hero">
+    <h1><%= h(@item.name) %></h1>
+    <p class="description"><%= h(@item.description.to_s.empty? ? 'No description provided.' : @item.description) %></p>
+
+    <div class="meta">
+      <div class="meta-card">
+        <p class="label">Price</p>
+        <p class="value"><%= number_to_currency(@item.price) %></p>
+      </div>
+      <div class="meta-card">
+        <p class="label">Category</p>
+        <p class="value"><%= h(@item.category.to_s.empty? ? '-' : @item.category) %></p>
+      </div>
+      <div class="meta-card">
+        <p class="label">Available</p>
+        <p class="value"><%= @item.available ? 'Yes' : 'No' %></p>
+      </div>
+      <div class="meta-card">
+        <p class="label">Current Highest Bid</p>
+        <p class="value"><%= @highest_bid ? number_to_currency(@highest_bid.amount) : 'No bids yet' %></p>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2 class="card-title">Place a Bid</h2>
+      <form class="bid-form" action="/items/<%= @item.id %>/bids" method="post">
+        <div>
+          <label for="bidder_name">Your Name</label>
+          <input id="bidder_name" name="bid[bidder_name]" type="text" required>
+        </div>
+        <div>
+          <label for="bid_amount">Bid Amount</label>
+          <input id="bid_amount" name="bid[amount]" type="number" step="0.01" min="0.01" required>
+        </div>
+        <button type="submit">Place Bid</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2 class="card-title">Bid History</h2>
+      <% if @bids && !@bids.empty? %>
+        <table>
+          <thead>
+            <tr>
+              <th>Bidder</th>
+              <th>Amount</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @bids.each do |bid| %>
+              <tr>
+                <td><%= h(bid.bidder_name) %></td>
+                <td><%= number_to_currency(bid.amount) %></td>
+                <td><%= format_datetime(bid.created_at) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% else %>
+        <p>No bids yet.</p>
+      <% end %>
+    </section>
+  </div>
+
+  <a class="back-link" href="/items">Back to items list</a>
+</main>

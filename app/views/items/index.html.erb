@@ -1,0 +1,80 @@
+<h1>Items List</h1>
+
+<% if params['notice'] && !params['notice'].empty? %>
+  <p style="color: green;"><%= h(params['notice']) %></p>
+<% end %>
+
+<% if @error_messages && !@error_messages.empty? %>
+  <div style="color: red;">
+    <p>Could not create item:</p>
+    <ul>
+      <% @error_messages.each do |message| %>
+        <li><%= h(message) %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<section style="margin-bottom: 1rem;">
+  <h2>Search Items</h2>
+  <form action="/items/search" method="get">
+    <label for="query">Keyword</label>
+    <input id="query" name="query" type="text" value="<%= h(params['query']) %>" placeholder="Search by name or description">
+    <button type="submit">Search</button>
+    <a href="/items">Clear</a>
+  </form>
+</section>
+
+<section style="margin-bottom: 1rem;">
+  <h2>Create Item</h2>
+  <form action="/items" method="post">
+    <div>
+      <label for="item_name">Name</label>
+      <input id="item_name" name="item[name]" type="text" required>
+    </div>
+    <div>
+      <label for="item_description">Description</label>
+      <textarea id="item_description" name="item[description]" rows="3"></textarea>
+    </div>
+    <div>
+      <label for="item_price">Price</label>
+      <input id="item_price" name="item[price]" type="number" step="0.01" min="0">
+    </div>
+    <div>
+      <label for="item_category">Category</label>
+      <input id="item_category" name="item[category]" type="text">
+    </div>
+    <div>
+      <label for="item_available">Available</label>
+      <input id="item_available" name="item[available]" type="checkbox" value="1" checked>
+    </div>
+    <button type="submit">Create Item</button>
+  </form>
+</section>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Price</th>
+      <th>Category</th>
+      <th>Available</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @items.each do |item| %>
+      <tr>
+        <td><%= item.id %></td>
+        <td><%= h(item.name) %></td>
+        <td><%= h(item.description) %></td>
+        <td><%= number_to_currency(item.price) %></td>
+        <td><%= h(item.category.to_s.empty? ? '-' : item.category) %></td>
+        <td><%= item.available ? 'Yes' : 'No' %></td>
+        <td><a href="/items/<%= item.id %>">View</a></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
