@@ -1,0 +1,23 @@
+<h1>Payment Received - Order Confirmation</h1>
+
+<p>Hello Seller,</p>
+
+<p>A buyer has completed payment for your auction. Here are the details:</p>
+
+<h2>Sale Details</h2>
+<div style="margin: 20px 0; padding: 15px; background-color: #f0f0f0; border-radius: 5px;">
+  <p><strong>Auction ID:</strong> <%= @auction.id %></p>
+  <p><strong>Buyer Email:</strong> <%= @user.email %></p>
+  <p><strong>Sale Amount:</strong> $<%= @amount_dollars %></p>
+  <p><strong>Payment Status:</strong> Confirmed</p>
+  <p><strong>Payment Date:</strong> <%= @payment_record.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+</div>
+
+<h2>Next Steps</h2>
+<p>Please prepare the item for shipment or pickup and update the buyer on delivery details.</p>
+
+<p><a href="<%= root_url %>auctions/<%= @auction.id %>" style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">View Auction Details</a></p>
+
+<p>Thank you for selling on our platform!</p>
+
+<p>Best regards,<br>The Auction Team</p>
