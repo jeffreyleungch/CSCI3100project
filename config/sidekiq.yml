@@ -1,6 +1,24 @@
 
 :concurrency: 5
+:timeout: 30
+:max_retries: 5
+:verbose: false
+
+# Queue configuration with priorities
 :queues:
-  - default
-  - mailers
-  - critical
+  - [critical, 10]      # Critical jobs (auction close) - higher priority
+  - [mailers, 5]        # Email jobs
+  - [default, 1]        # Default jobs
+
+# Retry configuration per queue
+:max_retries: 5
+# Exponential backoff: job will retry with increasing delays
+# 1st retry: ~5 seconds
+# 2nd retry: ~25 seconds  
+# 3rd retry: ~2 minutes
+# 4th retry: ~15 minutes
+# 5th retry: ~2 hours
+
+# Dead letter queue for permanently failed jobs
+:dead_max_jobs: 10000
+:dead_max_size: 1000

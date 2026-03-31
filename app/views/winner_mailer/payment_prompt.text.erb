@@ -1,0 +1,19 @@
+Action Required: Complete Your Payment
+
+Hi <%= @user.email %>,
+
+Congratulations! You won auction #<%= @auction.id %> with a winning bid of $<%= @amount_dollars %>.
+
+NEXT STEPS
+To complete your purchase, please proceed to payment within 48 hours:
+
+Amount Due: $<%= @amount_dollars %>
+Auction ID: <%= @auction.id %>
+Payment Deadline: 48 hours from now
+
+Complete Payment: <%= root_url %>payments/<%= @payment_record.id %>
+
+If you have any questions, please contact our support team.
+
+Best regards,
+The Auction Team

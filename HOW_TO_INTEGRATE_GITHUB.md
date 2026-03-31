@@ -25,7 +25,6 @@
    ```bash
    redis-server &
    bundle exec sidekiq -C config/sidekiq.yml &
-   RAILS_ENV=test bundle exec rails db:prepare
    bundle exec rspec
    ```
    Expect coverage **>=85%**. If not, add/adjust specs before pushing.

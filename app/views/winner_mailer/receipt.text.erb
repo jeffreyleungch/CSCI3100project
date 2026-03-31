@@ -1,0 +1,21 @@
+Payment Confirmed - Receipt
+
+Hi <%= @user.email %>,
+
+Thank you for completing your payment! Your purchase is now confirmed.
+
+ORDER DETAILS
+Auction ID: <%= @auction.id %>
+Amount Paid: $<%= @amount_dollars %>
+Payment Date: <%= @payment_record.updated_at.strftime("%B %d, %Y") %>
+Status: Confirmed
+
+WHAT'S NEXT?
+The seller will be notified and your item will be prepared for shipment or pickup.
+
+You can view your order status at any time on your account page.
+
+Thank you for using our auction platform!
+
+Best regards,
+The Auction Team
