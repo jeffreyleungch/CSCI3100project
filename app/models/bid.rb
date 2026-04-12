@@ -1,10 +1,6 @@
 class Bid < ApplicationRecord
-  belongs_to :auction
-  belongs_to :user
-  belongs_to :item, optional: true
+  belongs_to :item
 
-  include BroadcastsAuctionUpdates
-
-  validates :amount_cents, numericality: { greater_than: 0 }
-  validates :user_id, presence: true
+  validates :amount, numericality: { greater_than: 0 }
+  validates :bidder_name, presence: true
 end

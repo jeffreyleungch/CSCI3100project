@@ -13,3 +13,4 @@ group :test do
   gem 'sqlite3', '~> 2.0'
   gem 'database_cleaner-active_record'
 end
+gem "rackup", "~> 2.3"
