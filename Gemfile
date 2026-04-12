@@ -5,6 +5,7 @@ gem 'sinatra', '>= 2.0.1'
 gem 'puma'
 gem 'activerecord'
 gem 'activejob'
+gem 'stripe'
 
 group :test do
   gem 'rspec'

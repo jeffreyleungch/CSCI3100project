@@ -1,0 +1,84 @@
+<style>
+  .success-page {
+    max-width: 660px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    color: #1c1917;
+  }
+
+  .panel {
+    background: #fffdfa;
+    border: 1px solid #d8cfc2;
+    border-radius: 16px;
+    padding: 1.4rem;
+    box-shadow: 0 6px 20px rgba(45, 35, 20, 0.08);
+  }
+
+  h1 {
+    margin-top: 0;
+    font-size: 2rem;
+  }
+
+  .summary {
+    margin: 1rem 0 1.5rem;
+  }
+
+  .summary p {
+    margin: 0.6rem 0;
+  }
+
+  .button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 1.4rem;
+  }
+
+  .button,
+  .back-link {
+    display: inline-block;
+    padding: 0.85rem 1.3rem;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .button {
+    background: #047857;
+    color: #fff;
+  }
+
+  .back-link {
+    border: 1px solid #d8cfc2;
+    color: #92400e;
+    background: transparent;
+  }
+</style>
+
+<main class="success-page">
+  <section class="panel">
+    <h1>Payment Successful</h1>
+
+    <% if @payment_record %>
+      <div class="summary">
+        <p>Your payment for <strong><%= h(@item.name) %></strong> is complete.</p>
+        <p>Amount paid: <strong><%= number_to_currency(@payment_record.amount_cents.to_f / 100.0) %></strong></p>
+        <p>Payment reference: <strong><%= h(@payment_record.stripe_payment_intent_id) %></strong></p>
+        <% if @payment_record.payer_email %>
+          <p>Receipt sent to: <strong><%= h(@payment_record.payer_email) %></strong></p>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="summary">
+        <p>Payment appears to have completed, but we could not find a matching payment record.</p>
+        <p>You can still return to the item page and verify your order.</p>
+      </div>
+    <% end %>
+
+    <div class="button-group">
+      <a class="button" href="/items/<%= @item.id %>">Back to item</a>
+      <a class="back-link" href="/items">Browse more items</a>
+    </div>
+  </section>
+</main>

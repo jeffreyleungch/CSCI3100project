@@ -1,0 +1,176 @@
+<style>
+  .checkout-page {
+    max-width: 680px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    color: #1b1b1a;
+  }
+
+  .panel {
+    background: #fffdfa;
+    border: 1px solid #d8cfc2;
+    border-radius: 16px;
+    padding: 1.4rem;
+    box-shadow: 0 6px 20px rgba(45, 35, 20, 0.08);
+  }
+
+  h1,
+  h2 {
+    margin: 0 0 1rem;
+  }
+
+  .details p {
+    margin: 0.55rem 0;
+  }
+
+  .total {
+    margin: 1rem 0 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .payment-button,
+  .back-link {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 0.85rem 1.3rem;
+    text-decoration: none;
+    color: #fff;
+    background: #b45309;
+    font-weight: 600;
+  }
+
+  .back-link {
+    background: transparent;
+    color: #92400e;
+    border: 1px solid #d8cfc2;
+    margin-top: 1rem;
+  }
+
+  #payment-request-button {
+    margin-top: 1rem;
+  }
+
+  .message {
+    margin-top: 1rem;
+    color: #6b7280;
+  }
+</style>
+
+<main class="checkout-page">
+  <section class="panel">
+    <h1>Checkout for <%= h(@item.name) %></h1>
+    <div class="details">
+      <p><strong>Price</strong>: <%= number_to_currency(@item.price) %></p>
+      <p><strong>Description</strong>: <%= h(@item.description.to_s.empty? ? 'No description provided.' : @item.description) %></p>
+      <p class="total">Total: <%= number_to_currency(@item.price) %></p>
+    </div>
+
+    <% if @stripe_enabled %>
+      <p>Tap the Google Pay / Apple Pay button below if your browser supports it.</p>
+      <div id="payment-request-button"></div>
+      <div id="button-fallback" class="message" style="display:none;">
+        This browser does not support Google Pay via Stripe Payment Request API. Please open this page in Chrome on a supported device.
+      </div>
+    <% else %>
+      <div class="message">
+        Stripe is not configured. Set <code>STRIPE_SECRET_KEY</code> and <code>STRIPE_PUBLISHABLE_KEY</code> in your environment.
+      </div>
+    <% end %>
+
+    <p class="message">After completing payment, you will be redirected back to the item page.</p>
+    <a class="back-link" href="/items/<%= @item.id %>">Back to item</a>
+  </section>
+</main>
+
+<% if @stripe_enabled %>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script>
+    const stripe = Stripe('<%= h(@stripe_publishable_key) %>');
+    const amount = <%= (@item.price.to_f * 100).to_i %>;
+    const itemName = '<%= h(@item.name) %>';
+
+    const paymentRequest = stripe.paymentRequest({
+      country: 'US',
+      currency: 'usd',
+      total: {
+        label: itemName,
+        amount: amount
+      },
+      requestPayerName: true,
+      requestPayerEmail: true
+    });
+
+    const elements = stripe.elements();
+    const prButton = elements.create('paymentRequestButton', {
+      paymentRequest: paymentRequest,
+      style: {
+        paymentRequestButton: {
+          type: 'buy',
+          theme: 'dark',
+          height: '64px'
+        }
+      }
+    });
+
+    paymentRequest.canMakePayment().then(function(result) {
+      if (result) {
+        prButton.mount('#payment-request-button');
+      } else {
+        document.getElementById('payment-request-button').style.display = 'none';
+        document.getElementById('button-fallback').style.display = 'block';
+      }
+    });
+
+    paymentRequest.on('paymentmethod', async function(event) {
+      const response = await fetch('/payments/<%= @item.id %>/create_payment_intent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          payment_method_id: event.paymentMethod.id,
+          payer_email: event.payerEmail
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        event.complete('fail');
+        alert(data.error);
+        return;
+      }
+
+      let clientSecret = data.client_secret;
+
+      if (data.requires_action) {
+        const { error: actionError, paymentIntent } = await stripe.confirmCardPayment(clientSecret);
+        if (actionError) {
+          event.complete('fail');
+          alert(actionError.message);
+          return;
+        }
+      }
+
+      event.complete('success');
+
+      const finalize = await fetch('/payments/<%= @item.id %>/complete_payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ payment_intent_id: data.payment_intent_id })
+      });
+
+      const finalizeData = await finalize.json();
+      if (finalizeData.error) {
+        alert(finalizeData.error);
+        return;
+      }
+
+      window.location.href = '/payments/<%= @item.id %>/success?payment_intent_id=' + encodeURIComponent(data.payment_intent_id);
+    });
+  </script>
+<% end %>

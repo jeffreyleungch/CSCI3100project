@@ -235,6 +235,16 @@
     </div>
   </section>
 
+  <section class="panel">
+    <h2 class="card-title">Fast Checkout</h2>
+    <% if @item.available %>
+      <p>Use Stripe + Google Pay on supported devices to pay for this item instantly.</p>
+      <a class="payment-button" href="/payments/<%= @item.id %>">Pay with Google Pay</a>
+    <% else %>
+      <p>This item is not available for purchase at the moment.</p>
+    <% end %>
+  </section>
+
   <div class="grid">
     <section class="panel">
       <h2 class="card-title">Place a Bid</h2>

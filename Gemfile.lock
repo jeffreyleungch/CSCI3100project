@@ -90,6 +90,9 @@ GEM
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
     sqlite3 (2.9.2-x86_64-linux-gnu)
+    stripe (19.0.0)
+      bigdecimal
+      logger
     tilt (2.7.0)
     timeout (0.6.1)
     tzinfo (2.0.6)
@@ -110,6 +113,7 @@ DEPENDENCIES
   simplecov
   sinatra (>= 2.0.1)
   sqlite3 (~> 2.0)
+  stripe
 
 RUBY VERSION
    ruby 3.4.7p58
