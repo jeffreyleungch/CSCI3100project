@@ -10,7 +10,8 @@ group :test do
   gem 'rspec'
   gem 'simplecov', require: false
   gem 'factory_bot'
-  gem 'sqlite3', '~> 2.0'
   gem 'database_cleaner-active_record'
 end
+
+gem 'sqlite3', '~> 2.0'
 gem "rackup", "~> 2.3"
