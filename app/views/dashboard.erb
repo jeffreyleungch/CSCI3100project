@@ -1,0 +1,391 @@
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f6f8fb;
+    color: #1f2937;
+  }
+
+  .dashboard-shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+  }
+
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .dashboard-header h1 {
+    margin: 0;
+  }
+
+  .dashboard-header p {
+    margin: 0.35rem 0 0;
+    color: #4b5563;
+  }
+
+  .dashboard-nav a {
+    color: #1d4ed8;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .kpi-grid,
+  .chart-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .kpi-label {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin: 0 0 0.45rem;
+  }
+
+  .kpi-value {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+
+  .kpi-subtext {
+    margin-top: 0.45rem;
+    color: #4b5563;
+    font-size: 0.92rem;
+  }
+
+  .card h2 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.05rem;
+  }
+
+  .chart-card {
+    min-height: 360px;
+  }
+
+  .empty-state {
+    color: #6b7280;
+    margin: 0;
+  }
+
+  .chart-card canvas {
+    display: block;
+    width: 100% !important;
+    height: 280px !important;
+  }
+
+  .chart-fallback {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .chart-fallback-note {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .fallback-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .fallback-label,
+  .fallback-value {
+    font-size: 0.92rem;
+    color: #374151;
+  }
+
+  .fallback-bar-track {
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
+  }
+
+  .fallback-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+  }
+</style>
+
+<main class="dashboard-shell">
+  <header class="dashboard-header">
+    <div>
+      <h1>Marketplace analytics dashboard</h1>
+      <p>Track listings growth, bid activity, GMV, category mix, and conversion performance.</p>
+    </div>
+    <nav class="dashboard-nav">
+      <a href="/items">← Back to items</a>
+    </nav>
+  </header>
+
+  <section class="kpi-grid">
+    <article class="card">
+      <p class="kpi-label">Total listings</p>
+      <p class="kpi-value"><%= @kpis[:total_listings] %></p>
+      <p class="kpi-subtext"><%= @kpis[:available_listings] %> currently available</p>
+    </article>
+
+    <article class="card">
+      <p class="kpi-label">Gross merchandise value</p>
+      <p class="kpi-value"><%= number_to_currency(@kpis[:total_gmv]) %></p>
+      <p class="kpi-subtext">Avg sale <%= number_to_currency(@kpis[:average_sale_value]) %></p>
+    </article>
+
+    <article class="card">
+      <p class="kpi-label">Total bids</p>
+      <p class="kpi-value"><%= @kpis[:total_bids] %></p>
+      <p class="kpi-subtext"><%= format('%.2f', @kpis[:average_bids_per_item]) %> bids per item</p>
+    </article>
+
+    <article class="card">
+      <p class="kpi-label">Completed payments</p>
+      <p class="kpi-value"><%= @kpis[:completed_payments] %></p>
+      <p class="kpi-subtext">Completion rate <%= percentage(@kpis[:payment_completion_rate]) %></p>
+    </article>
+
+    <article class="card">
+      <p class="kpi-label">Bid coverage</p>
+      <p class="kpi-value"><%= percentage(@kpis[:bid_coverage_rate]) %></p>
+      <p class="kpi-subtext">Share of listings with at least one bid</p>
+    </article>
+  </section>
+
+  <section class="chart-grid">
+    <article class="card chart-card">
+      <h2>Listings created per day</h2>
+      <canvas id="listings-chart"></canvas>
+    </article>
+
+    <article class="card chart-card">
+      <h2>Bids placed per day</h2>
+      <canvas id="bids-chart"></canvas>
+    </article>
+
+    <article class="card chart-card">
+      <h2>GMV by day</h2>
+      <canvas id="gmv-chart"></canvas>
+    </article>
+
+    <article class="card chart-card">
+      <h2>Listings by category</h2>
+      <canvas id="categories-chart"></canvas>
+    </article>
+
+    <article class="card chart-card">
+      <h2>Payment status mix</h2>
+      <canvas id="payments-chart"></canvas>
+    </article>
+  </section>
+</main>
+
+<script type="application/json" id="dashboard-data"><%= @chart_data.to_json.gsub('</', '<\\/') %></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const rawDashboardData = document.getElementById('dashboard-data');
+  let dashboardData = {};
+
+  try {
+    dashboardData = rawDashboardData ? JSON.parse(rawDashboardData.textContent) : {};
+  } catch (error) {
+    console.error('Failed to parse dashboard data', error);
+  }
+
+  function labelsAndValues(series) {
+    const entries = Object.entries(series || {});
+    return {
+      labels: entries.map(([label]) => label),
+      values: entries.map(([, value]) => value)
+    };
+  }
+
+  function renderFallback(canvas, labels, values, color, valueFormatter) {
+    const fallback = document.createElement('div');
+    fallback.className = 'chart-fallback';
+
+    const note = document.createElement('p');
+    note.className = 'chart-fallback-note';
+    note.textContent = typeof window.Chart === 'undefined'
+      ? 'Chart.js could not be loaded, so this chart is shown in compact mode.'
+      : 'Rendered in compact mode.';
+    fallback.appendChild(note);
+
+    const maxValue = Math.max(...values, 0);
+
+    labels.forEach((label, index) => {
+      const value = values[index];
+      const row = document.createElement('div');
+      row.className = 'fallback-row';
+
+      const labelElement = document.createElement('span');
+      labelElement.className = 'fallback-label';
+      labelElement.textContent = label;
+
+      const track = document.createElement('div');
+      track.className = 'fallback-bar-track';
+
+      const fill = document.createElement('div');
+      fill.className = 'fallback-bar-fill';
+      fill.style.width = maxValue > 0 ? `${(value / maxValue) * 100}%` : '0%';
+      fill.style.background = color;
+      track.appendChild(fill);
+
+      const valueElement = document.createElement('span');
+      valueElement.className = 'fallback-value';
+      valueElement.textContent = valueFormatter ? valueFormatter(value) : value;
+
+      row.appendChild(labelElement);
+      row.appendChild(track);
+      row.appendChild(valueElement);
+      fallback.appendChild(row);
+    });
+
+    canvas.replaceWith(fallback);
+  }
+
+  function maybeRenderChart(canvasId, config, hasData) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    if (!hasData) {
+      const empty = document.createElement('p');
+      empty.className = 'empty-state';
+      empty.textContent = 'No data yet.';
+      canvas.replaceWith(empty);
+      return;
+    }
+
+    if (typeof window.Chart === 'undefined') {
+      const labels = config.data.labels || [];
+      const dataset = (config.data.datasets || [])[0] || {};
+      const values = dataset.data || [];
+      const color = Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[0] : (dataset.backgroundColor || dataset.borderColor || '#2563eb');
+      const formatter = config.options && config.options.plugins && config.options.plugins.tooltip && config.options.plugins.tooltip.callbacks && config.options.plugins.tooltip.callbacks.label;
+      renderFallback(canvas, labels, values, color, formatter ? (value) => formatter({ raw: value, formattedValue: value }) : null);
+      return;
+    }
+
+    new Chart(canvas, config);
+  }
+
+  const listings = labelsAndValues(dashboardData.listings_by_day);
+  maybeRenderChart('listings-chart', {
+    type: 'line',
+    data: {
+      labels: listings.labels,
+      datasets: [{
+        label: 'Listings',
+        data: listings.values,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.18)',
+        fill: true,
+        tension: 0.25
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }, listings.values.length > 0);
+
+  const bids = labelsAndValues(dashboardData.bids_by_day);
+  maybeRenderChart('bids-chart', {
+    type: 'bar',
+    data: {
+      labels: bids.labels,
+      datasets: [{
+        label: 'Bids',
+        data: bids.values,
+        backgroundColor: '#7c3aed'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }, bids.values.length > 0);
+
+  const gmv = labelsAndValues(dashboardData.gmv_by_day);
+  maybeRenderChart('gmv-chart', {
+    type: 'line',
+    data: {
+      labels: gmv.labels,
+      datasets: [{
+        label: 'GMV ($)',
+        data: gmv.values,
+        borderColor: '#059669',
+        backgroundColor: 'rgba(5, 150, 105, 0.18)',
+        fill: true,
+        tension: 0.25
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (context) => `$${Number(context.raw).toFixed(2)}`
+          }
+        }
+      }
+    }
+  }, gmv.values.length > 0);
+
+  const categories = labelsAndValues(dashboardData.categories);
+  maybeRenderChart('categories-chart', {
+    type: 'doughnut',
+    data: {
+      labels: categories.labels,
+      datasets: [{
+        data: categories.values,
+        backgroundColor: ['#2563eb', '#7c3aed', '#f59e0b', '#ef4444', '#10b981', '#14b8a6']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }, categories.values.length > 0);
+
+  const payments = labelsAndValues(dashboardData.payment_statuses);
+  maybeRenderChart('payments-chart', {
+    type: 'pie',
+    data: {
+      labels: payments.labels,
+      datasets: [{
+        data: payments.values,
+        backgroundColor: ['#f59e0b', '#10b981', '#2563eb', '#ef4444', '#6b7280']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }, payments.values.some((value) => value > 0));
+</script>
