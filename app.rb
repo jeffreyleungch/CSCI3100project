@@ -6,9 +6,12 @@ require 'json'
 
 Stripe.api_key = ENV['STRIPE_SECRET_KEY'] if ENV['STRIPE_SECRET_KEY']
 
+environment_name = ENV.fetch('RACK_ENV', 'development')
+database_path = ENV.fetch('APP_DB_PATH', File.expand_path("db/#{environment_name}.sqlite3", __dir__))
+
 ActiveRecord::Base.establish_connection(
   adapter: 'sqlite3',
-  database: File.expand_path('db/development.sqlite3', __dir__)
+  database: database_path
 )
 
 unless ActiveRecord::Base.connection.data_source_exists?('items')
@@ -66,6 +69,10 @@ class MyApp < Sinatra::Base
       Rack::Utils.escape_html(text.to_s)
     end
 
+    def percentage(value)
+      format('%.1f%%', value.to_f * 100)
+    end
+
     def number_to_currency(value)
       return '$0.00' if value.nil?
 
@@ -93,6 +100,26 @@ class MyApp < Sinatra::Base
       else
         puts "Receipt ready for #{payment_record.payer_email}: payment_record=#{payment_record.id}"
       end
+    end
+
+    def count_records_by_day(records)
+      counts = Hash.new(0)
+
+      records.each do |record|
+        counts[record.created_at.strftime('%Y-%m-%d')] += 1
+      end
+
+      counts.sort.to_h
+    end
+
+    def sum_records_by_day(records, value_method)
+      sums = Hash.new(0)
+
+      records.each do |record|
+        sums[record.created_at.strftime('%Y-%m-%d')] += record.public_send(value_method).to_i
+      end
+
+      sums.sort.to_h
     end
   end
 
@@ -129,6 +156,46 @@ class MyApp < Sinatra::Base
   get '/items/search' do
     @items = Item.search_by_fulltext(params['query']).order(created_at: :desc)
     erb :'items/index'
+  end
+
+  get '/dashboard' do
+    listings = Item.order(:created_at).to_a
+    bids = Bid.order(:created_at).to_a
+    payments = PaymentRecord.order(:created_at).to_a
+    completed_payments = payments.select(&:completed?)
+    items_with_bids = bids.map(&:item_id).uniq.count
+    total_listings = listings.count
+    total_bids = bids.count
+    total_payments = payments.count
+    completed_payment_count = completed_payments.count
+    total_gmv_cents = completed_payments.sum { |payment| payment.amount_cents.to_i }
+
+    @kpis = {
+      total_listings: total_listings,
+      available_listings: listings.count(&:available),
+      total_bids: total_bids,
+      completed_payments: completed_payment_count,
+      total_gmv: total_gmv_cents / 100.0,
+      average_sale_value: completed_payment_count.zero? ? 0 : (total_gmv_cents / 100.0) / completed_payment_count,
+      average_bids_per_item: total_listings.zero? ? 0 : total_bids.to_f / total_listings,
+      bid_coverage_rate: total_listings.zero? ? 0 : items_with_bids.to_f / total_listings,
+      payment_completion_rate: total_payments.zero? ? 0 : completed_payment_count.to_f / total_payments
+    }
+
+    @chart_data = {
+      listings_by_day: count_records_by_day(listings),
+      bids_by_day: count_records_by_day(bids),
+      gmv_by_day: sum_records_by_day(completed_payments, :amount_cents).transform_values { |amount| amount / 100.0 },
+      categories: listings.each_with_object(Hash.new(0)) do |item, counts|
+        key = item.category.to_s.strip.empty? ? 'Uncategorized' : item.category
+        counts[key] += 1
+      end.sort.to_h,
+      payment_statuses: PaymentRecord.statuses.keys.each_with_object({}) do |status_name, counts|
+        counts[status_name.capitalize] = payments.count { |payment| payment.status == status_name }
+      end
+    }
+
+    erb :dashboard
   end
 
   get '/items/:id' do
