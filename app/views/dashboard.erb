@@ -198,6 +198,11 @@
     </article>
 
     <article class="card chart-card">
+      <h2>Listings by college</h2>
+      <canvas id="colleges-chart"></canvas>
+    </article>
+
+    <article class="card chart-card">
       <h2>Payment status mix</h2>
       <canvas id="payments-chart"></canvas>
     </article>
@@ -372,6 +377,24 @@
       maintainAspectRatio: false
     }
   }, categories.values.length > 0);
+
+  const colleges = labelsAndValues(dashboardData.colleges);
+  maybeRenderChart('colleges-chart', {
+    type: 'bar',
+    data: {
+      labels: colleges.labels,
+      datasets: [{
+        label: 'Listings',
+        data: colleges.values,
+        backgroundColor: '#0f766e'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y'
+    }
+  }, colleges.values.some((value) => value > 0));
 
   const payments = labelsAndValues(dashboardData.payment_statuses);
   maybeRenderChart('payments-chart', {

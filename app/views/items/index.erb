@@ -1,7 +1,22 @@
 <h1>Items List</h1>
 
 <p>
-  <a href="/dashboard">View analytics dashboard</a>
+  <% if logged_in? %>
+    Signed in as <strong><%= h(current_user.name) %></strong>
+    (<%= h(current_user.email) %>, <%= h(current_role_label) %>, <%= h(community_name_for(current_user)) %>)
+    |
+    <a href="/dashboard">View analytics dashboard</a>
+    |
+    <form action="/logout" method="post" style="display: inline;">
+      <button type="submit">Sign Out</button>
+    </form>
+  <% else %>
+    <a href="/login">Sign in</a>
+    |
+    <a href="/register">Create account</a>
+    |
+    <a href="/dashboard">View analytics dashboard</a>
+  <% end %>
 </p>
 
 <% if params['notice'] && !params['notice'].empty? %>
@@ -22,8 +37,28 @@
 <section style="margin-bottom: 1rem;">
   <h2>Search Items</h2>
   <form action="/items/search" method="get">
-    <label for="query">Keyword</label>
-    <input id="query" name="query" type="text" value="<%= h(params['query']) %>" placeholder="Search by name or description">
+    <div>
+      <label for="query">Keyword</label>
+      <input id="query" name="query" type="text" value="<%= h(params['query']) %>" placeholder="Search by name or description">
+    </div>
+    <div>
+      <label for="search_category">Category</label>
+      <select id="search_category" name="category">
+        <option value="">All categories</option>
+        <% category_options.each do |category| %>
+          <option value="<%= h(category) %>" <%= 'selected' if params['category'] == category %>><%= h(category) %></option>
+        <% end %>
+      </select>
+    </div>
+    <div>
+      <label for="search_college">College</label>
+      <select id="search_college" name="college">
+        <option value="">All colleges</option>
+        <% college_options.each do |college| %>
+          <option value="<%= h(college) %>" <%= 'selected' if params['college'] == college %>><%= h(college) %></option>
+        <% end %>
+      </select>
+    </div>
     <button type="submit">Search</button>
     <a href="/items">Clear</a>
   </form>
@@ -31,39 +66,59 @@
 
 <section style="margin-bottom: 1rem;">
   <h2>Create Item</h2>
-  <form action="/items" method="post">
-    <div>
-      <label for="item_name">Name</label>
-      <input id="item_name" name="item[name]" type="text" required>
-    </div>
-    <div>
-      <label for="item_description">Description</label>
-      <textarea id="item_description" name="item[description]" rows="3"></textarea>
-    </div>
-    <div>
-      <label for="item_price">Price</label>
-      <input id="item_price" name="item[price]" type="number" step="0.01" min="0">
-    </div>
-    <div>
-      <label for="item_category">Category</label>
-      <input id="item_category" name="item[category]" type="text">
-    </div>
-    <div>
-      <label for="item_available">Available</label>
-      <input id="item_available" name="item[available]" type="checkbox" value="1" checked>
-    </div>
-    <button type="submit">Create Item</button>
-  </form>
+  <% if logged_in? %>
+    <p>Your listings are automatically scoped to <strong><%= h(community_name_for(current_user)) %></strong>.</p>
+    <form action="/items" method="post" enctype="multipart/form-data">
+      <div>
+        <label for="item_name">Name</label>
+        <input id="item_name" name="item[name]" type="text" required>
+      </div>
+      <div>
+        <label for="item_description">Description</label>
+        <textarea id="item_description" name="item[description]" rows="3"></textarea>
+      </div>
+      <div>
+        <label for="item_price">Price</label>
+        <input id="item_price" name="item[price]" type="number" step="0.01" min="0">
+      </div>
+      <div>
+        <label for="item_category">Category</label>
+        <select id="item_category" name="item[category]">
+          <% category_options.each do |category| %>
+            <option value="<%= h(category) %>"><%= h(category) %></option>
+          <% end %>
+        </select>
+      </div>
+      <div>
+        <label>College</label>
+        <p><%= h(community_name_for(current_user)) %></p>
+      </div>
+      <div>
+        <label for="item_photo">Photo</label>
+        <input id="item_photo" name="item[photo]" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+      </div>
+      <div>
+        <label for="item_available">Available</label>
+        <input id="item_available" name="item[available]" type="checkbox" value="1" checked>
+      </div>
+      <button type="submit">Create Item</button>
+    </form>
+  <% else %>
+    <p><a href="/login">Sign in</a> to create a listing.</p>
+  <% end %>
 </section>
 
 <table>
   <thead>
     <tr>
       <th>ID</th>
+      <th>Photo</th>
       <th>Name</th>
+      <th>Listed By</th>
       <th>Description</th>
       <th>Price</th>
       <th>Category</th>
+      <th>College</th>
       <th>Available</th>
       <th>Action</th>
     </tr>
@@ -72,15 +127,30 @@
     <% @items.each do |item| %>
       <tr>
         <td><%= item.id %></td>
+        <td>
+          <% if item.has_image? %>
+            <img src="<%= h(item.image_url) %>" alt="<%= h(item.name) %> photo" style="width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid #d8cfc2;">
+          <% else %>
+            <span>-</span>
+          <% end %>
+        </td>
         <td><%= h(item.name) %></td>
+        <td><%= h(item.user&.name || item.user&.email || 'Unknown seller') %></td>
         <td><%= h(item.description) %></td>
         <td><%= number_to_currency(item.price) %></td>
         <td><%= h(item.category.to_s.empty? ? '-' : item.category) %></td>
+        <td><%= h(item.respond_to?(:college) ? item.college.to_s.empty? ? '-' : item.college : '-') %></td>
         <td><%= item.available ? 'Yes' : 'No' %></td>
         <td>
           <a href="/items/<%= item.id %>">View</a>
           |
           <a href="/items/<%= item.id %>">Start Bidding</a>
+          <% if moderator? %>
+            |
+            <form action="/items/<%= item.id %>/delete" method="post" style="display: inline;">
+              <button type="submit">Remove</button>
+            </form>
+          <% end %>
         </td>
       </tr>
     <% end %>

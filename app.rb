@@ -1,10 +1,41 @@
 require 'sinatra'
 require 'active_record'
 require 'stripe'
+require 'bcrypt'
+require 'digest'
+require 'fileutils'
 require 'rack/utils'
 require 'json'
+require 'securerandom'
 
 Stripe.api_key = ENV['STRIPE_SECRET_KEY'] if ENV['STRIPE_SECRET_KEY']
+
+CATEGORY_OPTIONS = [
+  'Electronics',
+  'Home & Furniture',
+  'Clothing & Accessories',
+  'Books & Media',
+  'Sports & Outdoors',
+  'Beauty & Personal Care',
+  'Toys & Hobbies',
+  'Vehicles & Parts',
+  'Tickets & Vouchers',
+  'Others'
+].freeze
+
+COLLEGE_OPTIONS = [
+  'Chung Chi College',
+  'New Asia College',
+  'United College',
+  'Shaw College',
+  'Morningside College',
+  'S.H. Ho College',
+  'C.W. Chu College',
+  'Wu Yee Sun College',
+  'Lee Woo Sing College',
+  'Graduate School',
+  'Others'
+].freeze
 
 environment_name = ENV.fetch('RACK_ENV', 'development')
 database_path = ENV.fetch('APP_DB_PATH', File.expand_path("db/#{environment_name}.sqlite3", __dir__))
@@ -17,13 +48,97 @@ ActiveRecord::Base.establish_connection(
 unless ActiveRecord::Base.connection.data_source_exists?('items')
   ActiveRecord::Schema.define do
     create_table :items do |t|
+      t.references :user, null: true
       t.string :name
       t.text :description
       t.decimal :price, precision: 10, scale: 2
       t.string :category
+      t.string :college
       t.boolean :available, default: true
       t.timestamps
     end
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:items, :college)
+  ActiveRecord::Schema.define do
+    add_column :items, :college, :string
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:items, :user_id)
+  ActiveRecord::Schema.define do
+    add_column :items, :user_id, :integer
+    add_index :items, :user_id
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:items, :image_path)
+  ActiveRecord::Schema.define do
+    add_column :items, :image_path, :string
+  end
+end
+
+unless ActiveRecord::Base.connection.data_source_exists?('communities')
+  ActiveRecord::Schema.define do
+    create_table :communities do |t|
+      t.string :name, null: false
+      t.timestamps
+    end
+
+    add_index :communities, :name, unique: true
+  end
+end
+
+unless ActiveRecord::Base.connection.data_source_exists?('users')
+  ActiveRecord::Schema.define do
+    create_table :users do |t|
+      t.references :community, null: false
+      t.string :name, null: false
+      t.string :email, null: false
+      t.string :password_digest, null: false
+      t.string :role, null: false, default: 'student'
+      t.timestamps
+    end
+
+    add_index :users, :email, unique: true
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:users, :name)
+  ActiveRecord::Schema.define do
+    add_column :users, :name, :string
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:users, :password_digest)
+  ActiveRecord::Schema.define do
+    add_column :users, :password_digest, :string
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:users, :role)
+  ActiveRecord::Schema.define do
+    add_column :users, :role, :string, default: 'student', null: false
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:users, :community_id)
+  ActiveRecord::Schema.define do
+    add_column :users, :community_id, :integer
+    add_index :users, :community_id
+  end
+end
+
+if ActiveRecord::Base.connection.column_exists?(:users, :password)
+  UserMigrationClass = Class.new(ActiveRecord::Base) do
+    self.table_name = 'users'
+  end
+
+  UserMigrationClass.where(password_digest: [nil, '']).find_each do |legacy_user|
+    next if legacy_user[:password].to_s == ''
+
+    legacy_user.update_columns(password_digest: BCrypt::Password.create(legacy_user[:password]))
   end
 end
 
@@ -31,6 +146,7 @@ unless ActiveRecord::Base.connection.data_source_exists?('bids')
   ActiveRecord::Schema.define do
     create_table :bids do |t|
       t.references :item, null: false
+      t.references :user, null: true
       t.decimal :amount, precision: 10, scale: 2, null: false
       t.string :bidder_name, null: false
       t.timestamps
@@ -38,10 +154,18 @@ unless ActiveRecord::Base.connection.data_source_exists?('bids')
   end
 end
 
+unless ActiveRecord::Base.connection.column_exists?(:bids, :user_id)
+  ActiveRecord::Schema.define do
+    add_column :bids, :user_id, :integer
+    add_index :bids, :user_id
+  end
+end
+
 unless ActiveRecord::Base.connection.data_source_exists?('payment_records')
   ActiveRecord::Schema.define do
     create_table :payment_records do |t|
       t.references :item, null: false
+      t.references :user, null: true
       t.integer :amount_cents, null: false
       t.string :currency, default: 'usd', null: false
       t.integer :status, default: 0, null: false
@@ -52,6 +176,13 @@ unless ActiveRecord::Base.connection.data_source_exists?('payment_records')
   end
 end
 
+unless ActiveRecord::Base.connection.column_exists?(:payment_records, :user_id)
+  ActiveRecord::Schema.define do
+    add_column :payment_records, :user_id, :integer
+    add_index :payment_records, :user_id
+  end
+end
+
 class ApplicationRecord < ActiveRecord::Base
   self.abstract_class = true
 end
@@ -59,14 +190,55 @@ end
 require_relative 'app/models/item'
 require_relative 'app/models/bid'
 require_relative 'app/models/payment_record'
+require_relative 'app/models/community'
+require_relative 'app/models/user'
+
+COLLEGE_OPTIONS.each do |community_name|
+  Community.find_or_create_by!(name: community_name)
+end
 
 class MyApp < Sinatra::Base
+  enable :sessions
   set :views, File.expand_path('app/views', __dir__)
+  set :public_folder, File.expand_path('public', __dir__)
   set :host_authorization, { permitted_hosts: [] }
+
+  raw_session_secret = ENV['SESSION_SECRET'].to_s
+  normalized_session_secret = if raw_session_secret.length >= 64
+                                raw_session_secret
+                              elsif raw_session_secret != ''
+                                Digest::SHA256.hexdigest(raw_session_secret)
+                              else
+                                SecureRandom.hex(64)
+                              end
+
+  set :session_secret, normalized_session_secret
 
   helpers do
     def h(text)
       Rack::Utils.escape_html(text.to_s)
+    end
+
+    def category_options
+      CATEGORY_OPTIONS
+    end
+
+    def college_options
+      COLLEGE_OPTIONS
+    end
+
+    def normalize_category(category)
+      value = category.to_s.strip
+      return 'Others' if value.empty?
+
+      CATEGORY_OPTIONS.include?(value) ? value : 'Others'
+    end
+
+    def normalize_college(college)
+      value = college.to_s.strip
+      return 'Others' if value.empty?
+
+      COLLEGE_OPTIONS.include?(value) ? value : 'Others'
     end
 
     def percentage(value)
@@ -102,6 +274,43 @@ class MyApp < Sinatra::Base
       end
     end
 
+    def item_upload_dir
+      File.expand_path('public/uploads/items', __dir__)
+    end
+
+    def store_item_image(uploaded_file)
+      return [nil, nil] unless uploaded_file.is_a?(Hash)
+
+      tempfile = uploaded_file[:tempfile] || uploaded_file['tempfile']
+      original_filename = uploaded_file[:filename] || uploaded_file['filename']
+      return [nil, nil] if tempfile.nil? || original_filename.to_s.strip == ''
+
+      extension = File.extname(original_filename.to_s).downcase
+      allowed_extensions = %w[.jpg .jpeg .png .gif .webp]
+      unless allowed_extensions.include?(extension)
+        return [nil, 'Photo must be a JPG, PNG, GIF, or WEBP image.']
+      end
+
+      FileUtils.mkdir_p(item_upload_dir)
+      stored_filename = "#{SecureRandom.hex(16)}#{extension}"
+      stored_path = File.join(item_upload_dir, stored_filename)
+      FileUtils.copy(tempfile.path, stored_path)
+
+      [File.join('uploads/items', stored_filename), nil]
+    end
+
+    def remove_stored_item_image(relative_path)
+      return if relative_path.to_s.strip == ''
+
+      absolute_path = File.expand_path(File.join('public', relative_path), __dir__)
+      return unless absolute_path.start_with?(File.expand_path('public/uploads/items', __dir__))
+      return unless File.exist?(absolute_path)
+
+      File.delete(absolute_path)
+    rescue StandardError
+      nil
+    end
+
     def count_records_by_day(records)
       counts = Hash.new(0)
 
@@ -121,10 +330,117 @@ class MyApp < Sinatra::Base
 
       sums.sort.to_h
     end
+
+    def filtered_items_scope(query:, category:, college:)
+      Item.order(created_at: :desc)
+          .search_by_fulltext(query)
+          .filter_by_category(category)
+          .filter_by_college(college)
+          .order(created_at: :desc)
+    end
+
+    def communities
+      Community.order(:name)
+    end
+
+    def current_user
+      return @current_user if defined?(@current_user)
+
+      @current_user = User.find_by(id: session[:user_id])
+    end
+
+    def logged_in?
+      !current_user.nil?
+    end
+
+    def moderator?
+      current_user&.moderator?
+    end
+
+    def admin?
+      current_user&.admin?
+    end
+
+    def current_role_label
+      return 'Guest' unless logged_in?
+
+      current_user.role.capitalize
+    end
+
+    def community_name_for(user)
+      user&.community&.name.to_s
+    end
+
+    def require_login!
+      return if logged_in?
+
+      redirect '/login?notice=Please+sign+in+first'
+    end
+
+    def require_moderator!
+      return if moderator?
+
+      halt 403, 'Moderator access required'
+    end
   end
 
   get '/' do
     redirect '/items'
+  end
+
+  get '/register' do
+    @user = User.new
+    erb :'auth/register'
+  end
+
+  post '/register' do
+    community = Community.find_by(id: params['community_id'])
+    @user = User.new(
+      name: params['name'].to_s.strip,
+      email: params['email'].to_s.strip.downcase,
+      role: 'student',
+      community: community
+    )
+    @user.password = params['password']
+
+    if community.nil?
+      @error_message = 'Please select your college/community.'
+      return erb :'auth/register'
+    end
+
+    if params['password'].to_s.length < 8
+      @error_message = 'Password must be at least 8 characters.'
+      return erb :'auth/register'
+    end
+
+    if @user.save
+      session[:user_id] = @user.id
+      redirect '/items?notice=Account+created+successfully'
+    else
+      @error_message = @user.errors.full_messages.join(', ')
+      erb :'auth/register'
+    end
+  end
+
+  get '/login' do
+    erb :'auth/login'
+  end
+
+  post '/login' do
+    user = User.find_by(email: params['email'].to_s.strip.downcase)
+
+    if user&.authenticate(params['password'])
+      session[:user_id] = user.id
+      redirect '/items?notice=Signed+in+successfully'
+    else
+      @error_message = 'Invalid email or password.'
+      erb :'auth/login'
+    end
+  end
+
+  post '/logout' do
+    session.clear
+    redirect '/items?notice=Signed+out+successfully'
   end
 
   get '/items' do
@@ -133,20 +449,29 @@ class MyApp < Sinatra::Base
   end
 
   post '/items' do
+    require_login!
+
     item_params = params.fetch('item', {})
     available = item_params['available'] == '1'
+    image_path, image_error = store_item_image(item_params['photo'])
 
     item = Item.new(
+      user: current_user,
       name: item_params['name'],
       description: item_params['description'],
       price: item_params['price'],
-      category: item_params['category'],
-      available: available
+      category: normalize_category(item_params['category']),
+      college: normalize_college(community_name_for(current_user)),
+      available: available,
+      image_path: image_path
     )
+
+    item.errors.add(:image_path, image_error) if image_error
 
     if item.save
       redirect '/items?notice=Item+created+successfully'
     else
+      remove_stored_item_image(image_path)
       @items = Item.order(created_at: :desc)
       @error_messages = item.errors.full_messages
       erb :'items/index'
@@ -154,7 +479,11 @@ class MyApp < Sinatra::Base
   end
 
   get '/items/search' do
-    @items = Item.search_by_fulltext(params['query']).order(created_at: :desc)
+    @items = filtered_items_scope(
+      query: params['query'],
+      category: params['category'],
+      college: params['college']
+    )
     erb :'items/index'
   end
 
@@ -186,10 +515,12 @@ class MyApp < Sinatra::Base
       listings_by_day: count_records_by_day(listings),
       bids_by_day: count_records_by_day(bids),
       gmv_by_day: sum_records_by_day(completed_payments, :amount_cents).transform_values { |amount| amount / 100.0 },
-      categories: listings.each_with_object(Hash.new(0)) do |item, counts|
-        key = item.category.to_s.strip.empty? ? 'Uncategorized' : item.category
-        counts[key] += 1
-      end.sort.to_h,
+      categories: listings.each_with_object(CATEGORY_OPTIONS.index_with(0)) do |item, counts|
+        counts[normalize_category(item.category)] += 1
+      end,
+      colleges: listings.each_with_object(COLLEGE_OPTIONS.index_with(0)) do |item, counts|
+        counts[normalize_college(item.college)] += 1
+      end,
       payment_statuses: PaymentRecord.statuses.keys.each_with_object({}) do |status_name, counts|
         counts[status_name.capitalize] = payments.count { |payment| payment.status == status_name }
       end
@@ -309,12 +640,15 @@ class MyApp < Sinatra::Base
   end
 
   post '/items/:id/bids' do
+    require_login!
+
     @item = Item.find(params['id'])
     bid_params = params.fetch('bid', {})
 
     bid = @item.bids.build(
+      user: current_user,
       amount: bid_params['amount'],
-      bidder_name: bid_params['bidder_name']
+      bidder_name: current_user.name.to_s == '' ? current_user.email : current_user.name
     )
 
     current_highest = @item.bids.maximum(:amount).to_f
@@ -330,5 +664,14 @@ class MyApp < Sinatra::Base
       @bid_errors = bid.errors.full_messages
       erb :'items/show'
     end
+  end
+
+  post '/items/:id/delete' do
+    require_moderator!
+
+    item = Item.find(params['id'])
+    remove_stored_item_image(item.image_path)
+    item.destroy
+    redirect '/items?notice=Item+removed+by+moderator'
   end
 end
