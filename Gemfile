@@ -1,11 +1,12 @@
 source 'https://rubygems.org'
-ruby '3.4.7'
+ruby '3.4.9'
 
 gem 'sinatra', '>= 2.0.1'
 gem 'puma'
 gem 'activerecord'
 gem 'activejob'
 gem 'stripe'
+gem 'bcrypt'
 
 group :test do
   gem 'rspec'

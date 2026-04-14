@@ -13,6 +13,9 @@ RSpec.describe 'Dashboard' do
     Bid.delete_all
     PaymentRecord.delete_all
     Item.delete_all
+    User.delete_all if defined?(User)
+    Community.delete_all if defined?(Community)
+    COLLEGE_OPTIONS.each { |name| Community.create!(name: name) } if defined?(Community)
   end
 
   it 'renders KPI metrics and chart sections' do

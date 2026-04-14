@@ -89,6 +89,15 @@
     line-height: 1.6;
   }
 
+  .item-photo {
+    width: 100%;
+    max-height: 360px;
+    object-fit: cover;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: #fff;
+  }
+
   .notice,
   .error-box {
     border-radius: 10px;
@@ -196,6 +205,14 @@
 </style>
 
 <main class="auction-page">
+  <p>
+    <% if logged_in? %>
+      Signed in as <strong><%= h(current_user.name) %></strong> (<%= h(current_role_label) %>)
+    <% else %>
+      <a href="/login">Sign in</a> to place bids or pay.
+    <% end %>
+  </p>
+
   <% if params['notice'] && !params['notice'].empty? %>
     <p class="notice"><%= h(params['notice']) %></p>
   <% end %>
@@ -212,10 +229,18 @@
   <% end %>
 
   <section class="panel hero">
+    <% if @item.has_image? %>
+      <img class="item-photo" src="<%= h(@item.image_url) %>" alt="<%= h(@item.name) %> photo">
+    <% end %>
+
     <h1><%= h(@item.name) %></h1>
     <p class="description"><%= h(@item.description.to_s.empty? ? 'No description provided.' : @item.description) %></p>
 
     <div class="meta">
+      <div class="meta-card">
+        <p class="label">Seller</p>
+        <p class="value"><%= h(@item.user&.name || @item.user&.email || 'Unknown seller') %></p>
+      </div>
       <div class="meta-card">
         <p class="label">Price</p>
         <p class="value"><%= number_to_currency(@item.price) %></p>
@@ -237,9 +262,11 @@
 
   <section class="panel">
     <h2 class="card-title">Fast Checkout</h2>
-    <% if @item.available %>
+    <% if @item.available && logged_in? %>
       <p>Use Stripe + Google Pay on supported devices to pay for this item instantly.</p>
       <a class="payment-button" href="/payments/<%= @item.id %>">Pay with Google Pay</a>
+    <% elsif @item.available %>
+      <p><a href="/login">Sign in</a> before continuing to payment.</p>
     <% else %>
       <p>This item is not available for purchase at the moment.</p>
     <% end %>
@@ -248,17 +275,18 @@
   <div class="grid">
     <section class="panel">
       <h2 class="card-title">Place a Bid</h2>
-      <form class="bid-form" action="/items/<%= @item.id %>/bids" method="post">
-        <div>
-          <label for="bidder_name">Your Name</label>
-          <input id="bidder_name" name="bid[bidder_name]" type="text" required>
-        </div>
-        <div>
-          <label for="bid_amount">Bid Amount</label>
-          <input id="bid_amount" name="bid[amount]" type="number" step="0.01" min="0.01" required>
-        </div>
-        <button type="submit">Place Bid</button>
-      </form>
+      <% if logged_in? %>
+        <p>Bid as <strong><%= h(current_user.name) %></strong> from <strong><%= h(community_name_for(current_user)) %></strong>.</p>
+        <form class="bid-form" action="/items/<%= @item.id %>/bids" method="post">
+          <div>
+            <label for="bid_amount">Bid Amount</label>
+            <input id="bid_amount" name="bid[amount]" type="number" step="0.01" min="0.01" required>
+          </div>
+          <button type="submit">Place Bid</button>
+        </form>
+      <% else %>
+        <p><a href="/login">Sign in</a> to place a bid.</p>
+      <% end %>
     </section>
 
     <section class="panel">

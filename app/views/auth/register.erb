@@ -1,0 +1,37 @@
+<h1>Create Account</h1>
+
+<% if @error_message && !@error_message.empty? %>
+  <p style="color: red;"><%= h(@error_message) %></p>
+<% end %>
+
+<form action="/register" method="post">
+  <div>
+    <label for="name">Display Name</label>
+    <input id="name" name="name" type="text" value="<%= h(params['name']) %>" required>
+  </div>
+  <div>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" value="<%= h(params['email']) %>" required>
+  </div>
+  <div>
+    <label for="community_id">College / Community</label>
+    <select id="community_id" name="community_id" required>
+      <option value="">Select your college</option>
+      <% communities.each do |community| %>
+        <option value="<%= community.id %>" <%= 'selected' if params['community_id'].to_s == community.id.to_s %>><%= h(community.name) %></option>
+      <% end %>
+    </select>
+  </div>
+  <div>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" minlength="8" required>
+  </div>
+  <button type="submit">Create Account</button>
+</form>
+
+<p>
+  Already have an account?
+  <a href="/login">Sign in</a>
+</p>
+
+<p><a href="/items">Back to items</a></p>
