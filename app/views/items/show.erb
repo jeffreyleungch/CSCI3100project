@@ -250,32 +250,53 @@
         <p class="value"><%= h(@item.category.to_s.empty? ? '-' : @item.category) %></p>
       </div>
       <div class="meta-card">
-        <p class="label">Available</p>
-        <p class="value"><%= @item.available ? 'Yes' : 'No' %></p>
+        <p class="label">Status</p>
+        <p class="value"><%= h(@item.status_label) %></p>
       </div>
       <div class="meta-card">
         <p class="label">Current Highest Bid</p>
         <p class="value"><%= @highest_bid ? number_to_currency(@highest_bid.amount) : 'No bids yet' %></p>
       </div>
+      <% if @item_ends_at %>
+        <div class="meta-card">
+          <p class="label">Auction Ends</p>
+          <p class="value"><%= format_datetime(@item_ends_at) %></p>
+        </div>
+        <div class="meta-card">
+          <p class="label">Time Left</p>
+          <p class="value" id="auction-countdown" data-ends-at="<%= h(@item_ends_at.iso8601) %>">Loading...</p>
+        </div>
+      <% else %>
+        <div class="meta-card">
+          <p class="label">Timer</p>
+          <p class="value">Starts after the first bid</p>
+        </div>
+      <% end %>
     </div>
   </section>
 
   <section class="panel">
     <h2 class="card-title">Fast Checkout</h2>
-    <% if @item.available && logged_in? %>
-      <p>Use Stripe + Google Pay on supported devices to pay for this item instantly.</p>
+    <% if @item.reserved? && logged_in? %>
+      <p>This item is reserved for checkout. Complete payment within 15 minutes to mark it as sold.</p>
       <a class="payment-button" href="/payments/<%= @item.id %>">Pay with Google Pay</a>
-    <% elsif @item.available %>
+    <% elsif @item.reserved? %>
       <p><a href="/login">Sign in</a> before continuing to payment.</p>
+    <% elsif @item.sold? %>
+      <p>This item has already been sold.</p>
     <% else %>
-      <p>This item is not available for purchase at the moment.</p>
+      <p>Place a bid to reserve this item for payment.</p>
     <% end %>
   </section>
 
   <div class="grid">
     <section class="panel">
       <h2 class="card-title">Place a Bid</h2>
-      <% if logged_in? %>
+      <% if @item.sold? %>
+        <p>Bidding is closed because the item has been sold.</p>
+      <% elsif @item.reserved? %>
+        <p>This item is currently reserved while the buyer completes payment.</p>
+      <% elsif logged_in? %>
         <p>Bid as <strong><%= h(current_user.name) %></strong> from <strong><%= h(community_name_for(current_user)) %></strong>.</p>
         <form class="bid-form" action="/items/<%= @item.id %>/bids" method="post">
           <div>
@@ -318,3 +339,48 @@
 
   <a class="back-link" href="/items">Back to items list</a>
 </main>
+
+<% if @item_ends_at %>
+  <script>
+    (() => {
+      const countdownElement = document.getElementById("auction-countdown")
+      if (!countdownElement) return
+
+      const endsAt = new Date(countdownElement.dataset.endsAt)
+      if (Number.isNaN(endsAt.getTime())) {
+        countdownElement.textContent = "Unavailable"
+        return
+      }
+
+      const renderRemainingTime = () => {
+        const remainingSeconds = Math.floor((endsAt.getTime() - Date.now()) / 1000)
+
+        if (remainingSeconds <= 0) {
+          countdownElement.textContent = "Reservation expired"
+          window.setTimeout(() => window.location.reload(), 1000)
+          return false
+        }
+
+        const days = Math.floor(remainingSeconds / 86400)
+        const hours = Math.floor((remainingSeconds % 86400) / 3600)
+        const minutes = Math.floor((remainingSeconds % 3600) / 60)
+        const seconds = remainingSeconds % 60
+        const parts = []
+
+        if (days > 0) parts.push(`${days}d`)
+        parts.push(`${hours}h`)
+        parts.push(`${minutes}m`)
+        parts.push(`${seconds}s`)
+
+        countdownElement.textContent = parts.join(" ")
+        return true
+      }
+
+      if (!renderRemainingTime()) return
+
+      const intervalId = window.setInterval(() => {
+        if (!renderRemainingTime()) window.clearInterval(intervalId)
+      }, 1000)
+    })()
+  </script>
+<% end %>
