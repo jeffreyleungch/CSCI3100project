@@ -50,6 +50,6 @@ Agile cadence with weekly milestones. Use GitHub Projects and Issues. Maintain
 a Feature Ownership table in README to reflect primary/secondary devs.
 
 11. Links (to be filled)
-• GitHub Repository:
-• Deployed App (Staging/Prod):
+• GitHub Repository:https://github.com/jeffreyleungch/CSCI3100project
+• Deployed App (Staging/Prod):https://csci3100project.onrender.com
 • Demo Video (5 minutes)
