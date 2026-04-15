@@ -202,8 +202,22 @@
       align-items: start;
     }
   }
-</style>
 
+  .notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--warn);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    display: none;
+    z-index: 1000;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+</style>
 <main class="auction-page">
   <p>
     <% if logged_in? %>
@@ -340,6 +354,8 @@
   <a class="back-link" href="/items">Back to items list</a>
 </main>
 
+<div id="auction-notification" class="notification">Auction ending in 5 minutes or less!</div>
+
 <% if @item_ends_at %>
   <script>
     (() => {
@@ -354,6 +370,13 @@
 
       const renderRemainingTime = () => {
         const remainingSeconds = Math.floor((endsAt.getTime() - Date.now()) / 1000)
+
+        const notification = document.getElementById("auction-notification")
+        if (remainingSeconds > 0 && remainingSeconds <= 300) {
+          notification.style.display = 'block'
+        } else {
+          notification.style.display = 'none'
+        }
 
         if (remainingSeconds <= 0) {
           countdownElement.textContent = "Reservation expired"
