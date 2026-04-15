@@ -7,8 +7,12 @@ require 'fileutils'
 require 'rack/utils'
 require 'json'
 require 'securerandom'
+require 'time'
 
 Stripe.api_key = ENV['STRIPE_SECRET_KEY'] if ENV['STRIPE_SECRET_KEY']
+
+AUCTION_DURATION_SECONDS = 15 * 60
+HONG_KONG_UTC_OFFSET = 8 * 60 * 60
 
 CATEGORY_OPTIONS = [
   'Electronics',
@@ -76,6 +80,18 @@ end
 unless ActiveRecord::Base.connection.column_exists?(:items, :image_path)
   ActiveRecord::Schema.define do
     add_column :items, :image_path, :string
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:items, :ends_at)
+  ActiveRecord::Schema.define do
+    add_column :items, :ends_at, :datetime
+  end
+end
+
+unless ActiveRecord::Base.connection.column_exists?(:items, :status)
+  ActiveRecord::Schema.define do
+    add_column :items, :status, :string, default: 'available'
   end
 end
 
@@ -193,6 +209,19 @@ require_relative 'app/models/payment_record'
 require_relative 'app/models/community'
 require_relative 'app/models/user'
 
+if ActiveRecord::Base.connection.column_exists?(:items, :status)
+  Item.where(status: [nil, '']).find_each do |item|
+    inferred_status = if item.ends_at && item.ends_at > Time.now
+                        Item::STATUS_RESERVED
+                      elsif item.available == false
+                        Item::STATUS_SOLD
+                      else
+                        Item::STATUS_AVAILABLE
+                      end
+    item.update_columns(status: inferred_status)
+  end
+end
+
 COLLEGE_OPTIONS.each do |community_name|
   Community.find_or_create_by!(name: community_name)
 end
@@ -254,7 +283,55 @@ class MyApp < Sinatra::Base
     def format_datetime(value)
       return '-' if value.nil?
 
-      value.strftime('%Y-%m-%d %H:%M:%S')
+      value.getutc.strftime('%Y-%m-%d %H:%M:%S')
+           .then { |_| value.getutc.localtime(HONG_KONG_UTC_OFFSET).strftime('%Y-%m-%d %H:%M:%S HKT') }
+    end
+
+    def default_item_ends_at(from_time = Time.now)
+      from_time + AUCTION_DURATION_SECONDS
+    end
+
+    def refresh_item_state!(item, now = Time.now)
+      current_status = item.status.to_s
+      current_status = Item::STATUS_AVAILABLE if current_status == ''
+
+      next_status = if item.payment_records.completed.exists?
+                      Item::STATUS_SOLD
+                    elsif current_status == Item::STATUS_RESERVED && item.ends_at && item.ends_at <= now
+                      Item::STATUS_AVAILABLE
+                    else
+                      current_status
+                    end
+
+      attributes = {}
+
+      case next_status
+      when Item::STATUS_RESERVED
+        if item.ends_at.nil? || item.ends_at <= now
+          next_status = Item::STATUS_AVAILABLE
+        else
+          attributes[:status] = Item::STATUS_RESERVED if item.status != Item::STATUS_RESERVED
+          attributes[:available] = false unless item.available == false
+        end
+      when Item::STATUS_SOLD
+        attributes[:status] = Item::STATUS_SOLD if item.status != Item::STATUS_SOLD
+        attributes[:available] = false unless item.available == false
+        attributes[:ends_at] = nil unless item.ends_at.nil?
+      end
+
+      if next_status == Item::STATUS_AVAILABLE
+        attributes[:status] = Item::STATUS_AVAILABLE if item.status != Item::STATUS_AVAILABLE
+        attributes[:available] = true unless item.available == true
+        attributes[:ends_at] = nil unless item.ends_at.nil?
+      end
+
+      item.update_columns(attributes) unless attributes.empty?
+      item.reload if attributes.any?
+      item
+    end
+
+    def refresh_item_states!(items)
+      Array(items).each { |item| refresh_item_state!(item) }
     end
 
     def parse_json_request
@@ -444,7 +521,8 @@ class MyApp < Sinatra::Base
   end
 
   get '/items' do
-    @items = Item.order(created_at: :desc)
+    @items = Item.order(created_at: :desc).to_a
+    refresh_item_states!(@items)
     erb :'items/index'
   end
 
@@ -462,6 +540,7 @@ class MyApp < Sinatra::Base
       price: item_params['price'],
       category: normalize_category(item_params['category']),
       college: normalize_college(community_name_for(current_user)),
+      status: available ? Item::STATUS_AVAILABLE : Item::STATUS_SOLD,
       available: available,
       image_path: image_path
     )
@@ -472,7 +551,8 @@ class MyApp < Sinatra::Base
       redirect '/items?notice=Item+created+successfully'
     else
       remove_stored_item_image(image_path)
-      @items = Item.order(created_at: :desc)
+      @items = Item.order(created_at: :desc).to_a
+      refresh_item_states!(@items)
       @error_messages = item.errors.full_messages
       erb :'items/index'
     end
@@ -483,12 +563,14 @@ class MyApp < Sinatra::Base
       query: params['query'],
       category: params['category'],
       college: params['college']
-    )
+    ).to_a
+    refresh_item_states!(@items)
     erb :'items/index'
   end
 
   get '/dashboard' do
     listings = Item.order(:created_at).to_a
+    refresh_item_states!(listings)
     bids = Bid.order(:created_at).to_a
     payments = PaymentRecord.order(:created_at).to_a
     completed_payments = payments.select(&:completed?)
@@ -530,21 +612,26 @@ class MyApp < Sinatra::Base
   end
 
   get '/items/:id' do
-    @item = Item.find(params['id'])
+    @item = refresh_item_state!(Item.find(params['id']))
     @bids = @item.bids.order(amount: :desc, created_at: :asc)
     @highest_bid = @bids.first
+    @item_ends_at = @item.ends_at if @item.reserved?
     erb :'items/show'
   end
 
   get '/payments/:id' do
-    @item = Item.find(params['id'])
+    @item = refresh_item_state!(Item.find(params['id']))
+    unless @item.reserved?
+      redirect "/items/#{@item.id}?notice=Item+is+not+currently+reserved+for+payment"
+    end
+
     @stripe_publishable_key = ENV.fetch('STRIPE_PUBLISHABLE_KEY', '')
     @stripe_enabled = @stripe_publishable_key.to_s != '' && Stripe.api_key.to_s != ''
     erb :'payments/checkout'
   end
 
   get '/payments/:id/success' do
-    @item = Item.find(params['id'])
+    @item = refresh_item_state!(Item.find(params['id']))
     @payment_intent_id = params['payment_intent_id']
     @payment_record = PaymentRecord.find_by(stripe_payment_intent_id: @payment_intent_id)
     erb :'payments/success'
@@ -552,10 +639,15 @@ class MyApp < Sinatra::Base
 
   post '/payments/:id/create_payment_intent' do
     content_type :json
-    @item = Item.find(params['id'])
+    @item = refresh_item_state!(Item.find(params['id']))
     payload = parse_json_request
     payment_method_id = payload['payment_method_id']
     payer_email = payload['payer_email'] || payload['payerEmail']
+
+    unless @item.reserved?
+      status 409
+      return({ error: 'Item is not currently reserved for payment' }.to_json)
+    end
 
     if payment_method_id.to_s.empty?
       status 400
@@ -593,6 +685,7 @@ class MyApp < Sinatra::Base
       payer_email: payer_email
     )
 
+    @item.update!(status: Item::STATUS_SOLD, available: false, ends_at: nil) if payment_record.completed?
     send_payment_receipt(payment_record) if payment_record.completed?
 
     {
@@ -620,6 +713,7 @@ class MyApp < Sinatra::Base
     end
 
     payment_record = PaymentRecord.find_by!(stripe_payment_intent_id: payment_intent.id)
+  @item = refresh_item_state!(payment_record.item)
     previous_status = payment_record.status
 
     new_status = case payment_intent.status
@@ -634,6 +728,7 @@ class MyApp < Sinatra::Base
                  end
 
     payment_record.update!(status: new_status)
+    @item.update!(status: Item::STATUS_SOLD, available: false, ends_at: nil) if new_status == :completed
     send_payment_receipt(payment_record) if new_status == :completed && previous_status != 'completed'
 
     { success: true, status: payment_record.status }.to_json
@@ -642,8 +737,9 @@ class MyApp < Sinatra::Base
   post '/items/:id/bids' do
     require_login!
 
-    @item = Item.find(params['id'])
+    @item = refresh_item_state!(Item.find(params['id']))
     bid_params = params.fetch('bid', {})
+    first_bid = @item.bids.empty?
 
     bid = @item.bids.build(
       user: current_user,
@@ -652,15 +748,27 @@ class MyApp < Sinatra::Base
     )
 
     current_highest = @item.bids.maximum(:amount).to_f
+    if @item.sold?
+      bid.errors.add(:base, 'item has already been sold')
+    elsif @item.reserved?
+      bid.errors.add(:base, 'item is currently reserved pending payment')
+    elsif !@item.available
+      bid.errors.add(:base, 'item is not available for bidding')
+    end
+
     if bid.amount.to_f <= current_highest
       bid.errors.add(:amount, 'must be greater than current highest bid')
     end
 
     if bid.errors.empty? && bid.save
+      if first_bid
+        @item.update!(status: Item::STATUS_RESERVED, available: false, ends_at: default_item_ends_at(Time.now))
+      end
       redirect "/items/#{@item.id}?notice=Bid+placed+successfully"
     else
       @bids = @item.bids.order(amount: :desc, created_at: :asc)
       @highest_bid = @bids.first
+      @item_ends_at = @item.ends_at if @item.reserved?
       @bid_errors = bid.errors.full_messages
       erb :'items/show'
     end

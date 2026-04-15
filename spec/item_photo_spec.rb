@@ -37,4 +37,21 @@ RSpec.describe 'Item photos' do
     expect(detail_response.body).to include('sample-camera.png')
     expect(detail_response.body).to include('Camera photo')
   end
+
+  it 'shows timer instructions before the first bid' do
+    item = Item.create!(
+      name: 'Auction Clock',
+      description: 'Has a visible timer',
+      price: 120,
+      category: 'Electronics',
+      college: 'New Asia College',
+      available: true
+    )
+
+    detail_response = request.get("/items/#{item.id}")
+
+    expect(detail_response.status).to eq(200)
+    expect(detail_response.body).to include('Starts after the first bid')
+    expect(detail_response.body).not_to include('auction-countdown')
+  end
 end

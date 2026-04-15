@@ -1,8 +1,15 @@
 class Item < ApplicationRecord
+  STATUS_AVAILABLE = 'available'
+  STATUS_RESERVED = 'reserved'
+  STATUS_SOLD = 'sold'
+  STATUSES = [STATUS_AVAILABLE, STATUS_RESERVED, STATUS_SOLD].freeze
+
   belongs_to :user, optional: true
   has_many :bids, dependent: :destroy
+  has_many :payment_records, dependent: :destroy
 
   validates :image_path, length: { maximum: 255 }, allow_blank: true
+  validates :status, inclusion: { in: STATUSES }, allow_blank: true
 
   scope :search_by_fulltext, ->(query) {
     next all if query.blank?
@@ -34,6 +41,22 @@ class Item < ApplicationRecord
 
   def highest_bid
     bids.order(amount: :desc, created_at: :asc).first
+  end
+
+  def available_status?
+    status.to_s == STATUS_AVAILABLE
+  end
+
+  def reserved?
+    status.to_s == STATUS_RESERVED
+  end
+
+  def sold?
+    status.to_s == STATUS_SOLD
+  end
+
+  def status_label
+    status.to_s.strip == '' ? 'Unknown' : status.to_s.capitalize
   end
 
   def has_image?
