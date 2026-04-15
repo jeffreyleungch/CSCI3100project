@@ -9,7 +9,7 @@ class AuctionReminderJob < ApplicationJob
     AuctionChannel.broadcast_to(auction, {
       type: "reminder",
       auction_id: auction.id,
-      minutes_left: 15
+      minutes_left: AuctionConfig::REMINDER_MINUTES_BEFORE_END.to_i / 60
     })
   end
 end

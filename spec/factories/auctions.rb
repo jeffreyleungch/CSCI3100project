@@ -3,6 +3,6 @@ FactoryBot.define do
   factory :auction do
     association :community
     status { :running }
-    ends_at { 30.minutes.from_now }
+    ends_at { AuctionConfig::AUCTION_DURATION_MINUTES.from_now }
   end
 end

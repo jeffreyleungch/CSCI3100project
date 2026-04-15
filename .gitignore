@@ -1,0 +1,20 @@
+# Ignore the marketplace subdirectory (it's a separate git repo)
+marketplace/
+
+# Coverage reports
+coverage/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

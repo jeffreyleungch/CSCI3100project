@@ -12,7 +12,7 @@ module AuctionScheduler
   end
 
   def schedule_reminders
-    t = ends_at - 15.minutes
+    t = ends_at - AuctionConfig::REMINDER_MINUTES_BEFORE_END
     AuctionReminderJob.set(wait_until: t).perform_later(id) if t > Time.current
   end
 end
