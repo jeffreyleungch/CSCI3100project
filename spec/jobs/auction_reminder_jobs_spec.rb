@@ -27,7 +27,7 @@ RSpec.describe "Auction Reminder Jobs", type: :job do
     end
 
     it 'calculates actual minutes remaining' do
-      auction = create(:auction, ends_at: 23.hours.30.minutes.from_now, status: :running)
+      auction = create(:auction, ends_at: (23.hours + 30.minutes).from_now, status: :running)
 
       expect(AuctionChannel).to receive(:broadcast_to).with(
         auction,

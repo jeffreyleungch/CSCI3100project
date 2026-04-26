@@ -135,8 +135,9 @@ require_relative '../app/models/item'
 require_relative '../app/models/concerns/auction_scheduler'
 require_relative '../app/models/concerns/auction'
 require_relative '../app/models/concerns/broadcasts_auction_updates'
-require_relative '../app/jobs/auction_close_job'
-require_relative '../app/jobs/auction_reminder_job'
+Dir[File.expand_path('../app/jobs/*.rb', __dir__)].sort.each do |job_file|
+  require job_file
+end
 require_relative '../app/channels/auction_channel'
 
 Dir[File.expand_path('factories/*.rb', __dir__)].sort.each do |factory_file|
